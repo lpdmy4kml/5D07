@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Subway Run 3D - Endless Runner</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&display=swap" rel="stylesheet">
+    <style>
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+        body {
+            font-family: 'Outfit', sans-serif;
+            overflow: hidden;
+            background-color: #0d1117;
+            margin: 0;
+            padding: 0;
+        }
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        .hud-glass {
+            background: rgba(15, 23, 42, 0.65);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .text-glow {
+            text-shadow: 0 0 12px rgba(234, 179, 8, 0.6);
+        }
+        .text-glow-blue {
+            text-shadow: 0 0 12px rgba(59, 130, 246, 0.6);
+        }
+    </style>
+</head>
+<body class="w-screen h-screen overflow-hidden select-none bg-slate-950 text-white">
+
+    <!-- 3D Canvas Rendering Target -->
+    <div id="canvas-container"></div>
+
+    <!-- UI Overlay Layer -->
+    <div id="ui-layer" class="relative z-10 w-full h-full pointer-events-none flex flex-col justify-between p-4 sm:p-6">
+        
+        <!-- Top HUD (Live Stats & Pause) -->
+        <div id="hud" class="flex justify-between items-start w-full opacity-0 transition-opacity duration-500">
+            <!-- Left Stats: Coins & Multiplier -->
+            <div class="flex flex-col gap-2">
+                <div class="hud-glass px-4 py-2 rounded-2xl flex items-center gap-3 shadow-lg">
+                    <div class="w-8 h-8 rounded-full bg-amber-400 flex items-center justify-center text-amber-950 font-black text-lg shadow-inner">
+                        🪙
+                    </div>
+                    <div>
+                        <div class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Coins</div>
+                        <div id="hud-coins" class="text-2xl font-black text-amber-400 text-glow">0</div>
+                    </div>
+                </div>
+                <div class="hud-glass px-3 py-1 rounded-xl flex items-center gap-2 self-start">
+                    <span class="text-xs text-slate-400 font-bold uppercase">Mult</span>
+                    <span id="hud-multiplier" class="text-sm font-extrabold text-cyan-400">1.0x</span>
+                </div>
+            </div>
+
+            <!-- Right Stats: Distance & Pause Button -->
+            <div class="flex items-start gap-3">
+                <div class="hud-glass px-5 py-2 rounded-2xl text-right shadow-lg">
+                    <div class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Score</div>
+                    <div id="hud-score" class="text-3xl font-black text-cyan-400 text-glow-blue">0m</div>
+                </div>
+                <button id="btn-pause" class="pointer-events-auto hud-glass w-12 h-12 rounded-2xl flex items-center justify-center hover:bg-slate-800/80 active:scale-95 transition">
+                    <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Touch Controls Guide Overlay (Mobile Hint) -->
+        <div id="touch-hint" class="self-center mb-10 pointer-events-none opacity-0 transition-opacity duration-700 text-center">
+            <div class="hud-glass px-6 py-3 rounded-full text-xs font-semibold text-slate-300 animate-pulse">
+                Swipe Left/Right to Turn • Up to Jump • Down to Slide
+            </div>
+        </div>
+
+        <!-- Start Screen / Main Menu -->
+        <div id="screen-start" class="pointer-events-auto absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 backdrop-blur-md transition-all duration-500">
+            <div class="text-center max-w-md px-6">
+                <div class="inline-block mb-3 px-4 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 font-semibold text-xs tracking-widest uppercase">
+                    3D Endless Runner
+                </div>
+                <h1 class="text-5xl sm:text-6xl font-black tracking-tight mb-2 bg-gradient-to-r from-cyan-400 via-amber-300 to-amber-500 bg-clip-text text-transparent italic">
+                    METRO RUNNER
+                </h1>
+                <p class="text-slate-400 text-sm mb-8">Dodge obstacles, leap hurdles, slide under barriers & collect gold across the endless tracks!</p>
+                
+                <div class="hud-glass rounded-2xl p-4 mb-8 flex justify-around items-center">
+                    <div>
+                        <div class="text-xs text-slate-400 font-semibold uppercase">High Score</div>
+                        <div id="menu-highscore" class="text-2xl font-black text-cyan-400">0m</div>
+                    </div>
+                    <div class="w-px h-8 bg-slate-700"></div>
+                    <div>
+                        <div class="text-xs text-slate-400 font-semibold uppercase">Total Coins</div>
+                        <div id="menu-total-coins" class="text-2xl font-black text-amber-400">0</div>
+                    </div>
+                </div>
+
+                <button id="btn-start" class="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 font-black text-xl shadow-lg shadow-amber-500/25 hover:brightness-110 active:scale-98 transition transform">
+                    START RUN
+                </button>
+
+                <div class="mt-6 flex justify-center gap-6 text-xs text-slate-400">
+                    <span class="flex items-center gap-1">⌨️ Arrow Keys / A D</span>
+                    <span class="flex items-center gap-1">📱 Touch Swipes</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="screen-gameover" class="pointer-events-auto absolute inset-0 hidden flex flex-col items-center justify-center bg-slate-950/90 backdrop-blur-md transition-all duration-500">
+            <div class="text-center max-w-md px-6 w-full">
+                <div class="text-red-500 text-sm font-black uppercase tracking-widest mb-1">Crash!</div>
+                <h2 class="text-4xl font-black text-white mb-6">GAME OVER</h2>
+
+                <div id="new-high-badge" class="hidden mb-4 inline-block px-4 py-1 rounded-full bg-amber-400/20 border border-amber-400/50 text-amber-300 font-bold text-xs uppercase tracking-wider animate-bounce">
+                    🎉 New High Score!
+                </div>
+
+                <div class="hud-glass rounded-2xl p-6 mb-6 space-y-4">
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-400 font-semibold text-sm">Distance Run</span>
+                        <span id="go-score" class="text-2xl font-black text-cyan-400">0m</span>
+                    </div>
+                    <div class="h-px bg-slate-800"></div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-400 font-semibold text-sm">Coins Collected</span>
+                        <span id="go-coins" class="text-2xl font-black text-amber-400">0</span>
+                    </div>
+                    <div class="h-px bg-slate-800"></div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-400 font-semibold text-sm">Total Score</span>
+                        <span id="go-total" class="text-3xl font-black text-white">0</span>
+                    </div>
+                </div>
+
+                <button id="btn-restart" class="w-full py-4 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-black text-xl shadow-lg shadow-cyan-500/25 hover:brightness-110 active:scale-98 transition transform">
+                    TRY AGAIN
+                </button>
+            </div>
+        </div>
+
+        <!-- Pause Overlay Screen -->
+        <div id="screen-pause" class="pointer-events-auto absolute inset-0 hidden flex flex-col items-center justify-center bg-slate-950/80 backdrop-blur-md">
+            <h2 class="text-4xl font-black text-white mb-6">GAME PAUSED</h2>
+            <div class="flex flex-col gap-4 w-64">
+                <button id="btn-resume" class="py-3.5 rounded-xl bg-cyan-500 text-slate-950 font-black text-lg hover:bg-cyan-400 transition">
+                    RESUME
+                </button>
+                <button id="btn-quit" class="py-3.5 rounded-xl hud-glass text-slate-300 font-bold text-lg hover:bg-slate-800 transition">
+                    MAIN MENU
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // Synthesized Audio Controller for Web Audio FX
+        class SoundFX {
+            constructor() {
+                this.ctx = null;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            }
+
+            playCoin() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(987.77, this.ctx.currentTime); // B5
+                osc.frequency.setValueAtTime(1318.51, this.ctx.currentTime + 0.08); // E6
+                gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.25);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.25);
+            }
+
+            playJump() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(220, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(587.33, this.ctx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.18);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.18);
+            }
+
+            playSlide() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(300, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.2);
+                gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.2);
+            }
+
+            playCrash() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(120, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(30, this.ctx.currentTime + 0.4);
+                gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.4);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.4);
+            }
+        }
+
+        const audio = new SoundFX();
+
+        // Core Engine Constants
+        const LANES = [-3.2, 0, 3.2]; // X positions for 3 lanes
+        const SEGMENT_LENGTH = 40;
+        const INITIAL_SEGMENTS = 8;
+        const INITIAL_SPEED = 22;
+        const MAX_SPEED = 50;
+
+        // State Machine
+        const STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, GAMEOVER: 3 };
+        let currentState = STATE.MENU;
+
+        // Game Metrics & State Variables
+        let score = 0;
+        let coins = 0;
+        let speed = INITIAL_SPEED;
+        let currentLane = 1; // Center lane
+        let targetX = LANES[1];
+
+        // Player Jump/Slide Physics
+        let isJumping = false;
+        let jumpVelocity = 0;
+        const GRAVITY = -42;
+        const JUMP_FORCE = 15;
+        let playerY = 0;
+
+        let isSliding = false;
+        let slideTimer = 0;
+        const SLIDE_DURATION = 0.6;
+
+        // Three.js Core Setup
+        let scene, camera, renderer;
+        let playerGroup, playerBody, shadowMesh;
+        let segments = [];
+        let activeCoins = [];
+        let activeObstacles = [];
+
+        // Save Data
+        let highScore = parseInt(localStorage.getItem('runner_highscore') || '0');
+        let totalCoins = parseInt(localStorage.getItem('runner_total_coins') || '0');
+
+        function initThree() {
+            const container = document.getElementById('canvas-container');
+            
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0f1d);
+            scene.fog = new THREE.FogExp2(0x0a0f1d, 0.018);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+            camera.position.set(0, 4.5, -8);
+            camera.lookAt(0, 1.5, 10);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            // Lighting Setup
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(20, 40, -20);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 1024;
+            dirLight.shadow.mapSize.height = 1024;
+            dirLight.shadow.camera.near = 0.5;
+            dirLight.shadow.camera.far = 150;
+            dirLight.shadow.camera.left = -20;
+            dirLight.shadow.camera.right = 20;
+            dirLight.shadow.camera.top = 20;
+            dirLight.shadow.camera.bottom = -20;
+            scene.add(dirLight);
+
+            // Hemisphere light for soft ambient sky/ground contrast
+            const hemiLight = new THREE.HemisphereLight(0x38bdf8, 0x0f172a, 0.4);
+            scene.add(hemiLight);
+
+            buildPlayer();
+            initEnvironment();
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function buildPlayer() {
+            playerGroup = new THREE.Group();
+
+            // Main Body Mesh (Stylized Robot / Runner)
+            const bodyGeo = new THREE.BoxGeometry(1, 1.4, 0.8);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.3, metalness: 0.5 });
+            playerBody = new THREE.Mesh(bodyGeo, bodyMat);
+            playerBody.position.y = 0.7;
+            playerBody.castShadow = true;
+            playerGroup.add(playerBody);
+
+            // Head / Visor
+            const headGeo = new THREE.BoxGeometry(0.7, 0.6, 0.6);
+            const headMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.2 });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.set(0, 1.5, 0.1);
+            
+            const visorGeo = new THREE.BoxGeometry(0.6, 0.2, 0.1);
+            const visorMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
+            const visor = new THREE.Mesh(visorGeo, visorMat);
+            visor.position.set(0, 1.55, 0.4);
+            playerGroup.add(head);
+            playerGroup.add(visor);
+
+            // Dynamic Blob Shadow on Ground
+            const shadowGeo = new THREE.PlaneGeometry(1.2, 1.2);
+            const shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45 });
+            shadowMesh = new THREE.Mesh(shadowGeo, shadowMat);
+            shadowMesh.rotation.x = -Math.PI / 2;
+            shadowMesh.position.y = 0.02;
+            scene.add(shadowMesh);
+
+            scene.add(playerGroup);
+        }
+
+        function initEnvironment() {
+            for (let i = 0; i < INITIAL_SEGMENTS; i++) {
+                spawnSegment(i * SEGMENT_LENGTH);
+            }
+        }
+
+        function createCoinMesh() {
+            const geo = new THREE.CylinderGeometry(0.4, 0.4, 0.1, 16);
+            const mat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.8, roughness: 0.2, emissive: 0xd97706, emissiveIntensity: 0.2 });
+            const coin = new THREE.Mesh(geo, mat);
+            coin.rotation.x = Math.PI / 2;
+            coin.castShadow = true;
+            return coin;
+        }
+
+        function spawnSegment(zPos) {
+            const segmentGroup = new THREE.Group();
+            segmentGroup.position.z = zPos;
+
+            // Track Ground Plane
+            const groundGeo = new THREE.PlaneGeometry(12, SEGMENT_LENGTH);
+            const groundMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.position.y = 0;
+            ground.position.z = SEGMENT_LENGTH / 2;
+            ground.receiveShadow = true;
+            segmentGroup.add(ground);
+
+            // Lane Divider Lines
+            [-1.6, 1.6].forEach(x => {
+                const lineGeo = new THREE.PlaneGeometry(0.15, SEGMENT_LENGTH);
+                const lineMat = new THREE.MeshBasicMaterial({ color: 0x334155 });
+                const line = new THREE.Mesh(lineGeo, lineMat);
+                line.rotation.x = -Math.PI / 2;
+                line.position.set(x, 0.01, SEGMENT_LENGTH / 2);
+                segmentGroup.add(line);
+            });
+
+            // Side Walls / Metro Barriers
+            [-6.2, 6.2].forEach(x => {
+                const wallGeo = new THREE.BoxGeometry(0.4, 2, SEGMENT_LENGTH);
+                const wallMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.5 });
+                const wall = new THREE.Mesh(wallGeo, wallMat);
+                wall.position.set(x, 1, SEGMENT_LENGTH / 2);
+                segmentGroup.add(wall);
+            });
+
+            // Procedural Obstacles & Collectibles (Only spawn beyond starting zone)
+            if (zPos > 40) {
+                const obstacleType = Math.floor(Math.random() * 4); // 0: None, 1: Low Hurdle, 2: High Barrier, 3: Full Wall
+                const laneIdx = Math.floor(Math.random() * 3);
+                const laneX = LANES[laneIdx];
+
+                if (obstacleType === 1) { // Low Hurdle (Must Jump)
+                    const geo = new THREE.BoxGeometry(2.6, 0.8, 0.4);
+                    const mat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.4 });
+                    const hurdle = new THREE.Mesh(geo, mat);
+                    hurdle.position.set(laneX, 0.4, SEGMENT_LENGTH / 2);
+                    hurdle.castShadow = true;
+                    hurdle.userData = { type: 'obstacle', subtype: 'low', box: new THREE.Box3() };
+                    segmentGroup.add(hurdle);
+                    activeObstacles.push(hurdle);
+                } else if (obstacleType === 2) { // High Barrier (Must Slide)
+                    const geo = new THREE.BoxGeometry(2.6, 1.2, 0.4);
+                    const mat = new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.4 });
+                    const barrier = new THREE.Mesh(geo, mat);
+                    barrier.position.set(laneX, 1.9, SEGMENT_LENGTH / 2);
+                    barrier.castShadow = true;
+                    barrier.userData = { type: 'obstacle', subtype: 'high', box: new THREE.Box3() };
+                    segmentGroup.add(barrier);
+
+                    // Support legs
+                    [-1.1, 1.1].forEach(lx => {
+                        const legGeo = new THREE.CylinderGeometry(0.08, 0.08, 1.3);
+                        const leg = new THREE.Mesh(legGeo, mat);
+                        leg.position.set(laneX + lx, 0.65, SEGMENT_LENGTH / 2);
+                        segmentGroup.add(leg);
+                    });
+                    activeObstacles.push(barrier);
+                } else if (obstacleType === 3) { // Full Wall (Must Avoid Lane)
+                    const geo = new THREE.BoxGeometry(2.6, 3, 0.8);
+                    const mat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.3 });
+                    const wall = new THREE.Mesh(geo, mat);
+                    wall.position.set(laneX, 1.5, SEGMENT_LENGTH / 2);
+                    wall.castShadow = true;
+                    wall.userData = { type: 'obstacle', subtype: 'full', box: new THREE.Box3() };
+                    segmentGroup.add(wall);
+                    activeObstacles.push(wall);
+                }
+
+                // Coins Generation along lanes
+                const coinLane = (obstacleType !== 0) ? (laneIdx + 1) % 3 : Math.floor(Math.random() * 3);
+                for (let c = 0; c < 3; c++) {
+                    const coin = createCoinMesh();
+                    coin.position.set(LANES[coinLane], 0.8, (SEGMENT_LENGTH / 4) * (c + 1));
+                    coin.userData = { collected: false };
+                    segmentGroup.add(coin);
+                    activeCoins.push(coin);
+                }
+            }
+
+            scene.add(segmentGroup);
+            segments.push(segmentGroup);
+        }
+
+        function setupInputs() {
+            // Keyboard Controls
+            window.addEventListener('keydown', (e) => {
+                if (currentState !== STATE.PLAYING) return;
+
+                if ((e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') && currentLane > 0) {
+                    currentLane--;
+                } else if ((e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') && currentLane < 2) {
+                    currentLane++;
+                } else if ((e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') && !isJumping) {
+                    triggerJump();
+                } else if ((e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') && !isSliding) {
+                    triggerSlide();
+                }
+                targetX = LANES[currentLane];
+            });
+
+            // Touch Swipe Detection
+            let touchStartX = 0;
+            let touchStartY = 0;
+
+            window.addEventListener('touchstart', (e) => {
+                touchStartX = e.touches[0].clientX;
+                touchStartY = e.touches[0].clientY;
+            }, { passive: true });
+
+            window.addEventListener('touchend', (e) => {
+                if (currentState !== STATE.PLAYING) return;
+                const deltaX = e.changedTouches[0].clientX - touchStartX;
+                const deltaY = e.changedTouches[0].clientY - touchStartY;
+
+                if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                    // Horizontal Swipe
+                    if (deltaX > 30 && currentLane < 2) currentLane++;
+                    else if (deltaX < -30 && currentLane > 0) currentLane--;
+                } else {
+                    // Vertical Swipe
+                    if (deltaY < -30 && !isJumping) triggerJump();
+                    else if (deltaY > 30 && !isSliding) triggerSlide();
+                }
+                targetX = LANES[currentLane];
+            }, { passive: true });
+        }
+
+        function triggerJump() {
+            isJumping = true;
+            jumpVelocity = JUMP_FORCE;
+            audio.playJump();
+        }
+
+        function triggerSlide() {
+            isSliding = true;
+            slideTimer = SLIDE_DURATION;
+            playerBody.scale.set(1, 0.4, 1);
+            playerBody.position.y = 0.3;
+            audio.playSlide();
+        }
+
+        let clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = Math.min(clock.getDelta(), 0.1);
+
+            if (currentState === STATE.PLAYING) {
+                updatePhysics(delta);
+                updateWorld(delta);
+                checkCollisions();
+            }
+
+            // Always render scene
+            renderer.render(scene, camera);
+        }
+
+        function updatePhysics(delta) {
+            // Horizontal Lane Interpolation (Lerp)
+            playerGroup.position.x += (targetX - playerGroup.position.x) * 15 * delta;
+
+            // Jump Physics
+            if (isJumping) {
+                playerY += jumpVelocity * delta;
+                jumpVelocity += GRAVITY * delta;
+
+                if (playerY <= 0) {
+                    playerY = 0;
+                    isJumping = false;
+                }
+            }
+            playerGroup.position.y = playerY;
+
+            // Slide Mechanics Timer
+            if (isSliding) {
+                slideTimer -= delta;
+                if (slideTimer <= 0) {
+                    isSliding = false;
+                    playerBody.scale.set(1, 1, 1);
+                    playerBody.position.y = 0.7;
+                }
+            }
+
+            // Shadow dynamic tracking
+            shadowMesh.position.x = playerGroup.position.x;
+            shadowMesh.scale.setScalar(1 - playerY * 0.15);
+
+            // Subtle running bounce animation
+            if (!isJumping && !isSliding) {
+                playerBody.position.y = 0.7 + Math.sin(clock.getElapsedTime() * 18) * 0.08;
+            }
+        }
+
+        function updateWorld(delta) {
+            // Speed progression
+            speed = Math.min(MAX_SPEED, speed + delta * 0.2);
+            const moveDistance = speed * delta;
+
+            // Update Track Segments Motion (Moving segments backward creates forward motion illusion)
+            segments.forEach(seg => {
+                seg.position.z -= moveDistance;
+            });
+
+            // Score calculation based on distance
+            score += moveDistance * 0.5;
+            document.getElementById('hud-score').innerText = `${Math.floor(score)}m`;
+            document.getElementById('hud-multiplier').innerText = `${(1 + speed / 30).toFixed(1)}x`;
+
+            // Recycling offscreen segments
+            if (segments.length > 0 && segments[0].position.z < -SEGMENT_LENGTH) {
+                const oldSeg = segments.shift();
+                
+                // Cleanup active coin/obstacle references from old segment
+                oldSeg.traverse((child) => {
+                    if (child.userData.type === 'obstacle') {
+                        const idx = activeObstacles.indexOf(child);
+                        if (idx > -1) activeObstacles.splice(idx, 1);
+                    }
+                    if (child.geometry && child.geometry.type === 'CylinderGeometry') {
+                        const idx = activeCoins.indexOf(child);
+                        if (idx > -1) activeCoins.splice(idx, 1);
+                    }
+                });
+
+                scene.remove(oldSeg);
+                const newZ = segments[segments.length - 1].position.z + SEGMENT_LENGTH;
+                spawnSegment(newZ);
+            }
+
+            // Rotate coins for visual appeal
+            activeCoins.forEach(coin => {
+                if (!coin.userData.collected) {
+                    coin.rotation.z += delta * 3;
+                }
+            });
+        }
+
+        function checkCollisions() {
+            const playerBox = new THREE.Box3();
+            
+            // Define player collision box based on crouch / jump state
+            const boxYMin = playerGroup.position.y + (isSliding ? 0.1 : 0.2);
+            const boxYMax = playerGroup.position.y + (isSliding ? 0.7 : 1.8);
+            
+            playerBox.min.set(playerGroup.position.x - 0.4, boxYMin, -0.4);
+            playerBox.max.set(playerGroup.position.x + 0.4, boxYMax, 0.4);
+
+            // 1. Obstacle Collision Check
+            for (let obs of activeObstacles) {
+                const obsBox = new THREE.Box3().setFromObject(obs);
+                
+                if (playerBox.intersectsBox(obsBox)) {
+                    gameOver();
+                    return;
+                }
+            }
+
+            // 2. Coin Collection Check
+            activeCoins.forEach(coin => {
+                if (!coin.userData.collected) {
+                    const coinWorldPos = new THREE.Vector3();
+                    coin.getWorldPosition(coinWorldPos);
+
+                    if (coinWorldPos.distanceTo(playerGroup.position) < 1.4) {
+                        coin.userData.collected = true;
+                        coin.visible = false;
+                        coins++;
+                        document.getElementById('hud-coins').innerText = coins;
+                        audio.playCoin();
+                    }
+                }
+            });
+        }
+
+        function startGame() {
+            audio.init();
+            
+            // Reset game metrics
+            score = 0;
+            coins = 0;
+            speed = INITIAL_SPEED;
+            currentLane = 1;
+            targetX = LANES[1];
+            playerGroup.position.set(0, 0, 0);
+
+            // Clear old track segments
+            segments.forEach(seg => scene.remove(seg));
+            segments = [];
+            activeCoins = [];
+            activeObstacles = [];
+
+            initEnvironment();
+
+            document.getElementById('hud-score').innerText = '0m';
+            document.getElementById('hud-coins').innerText = '0';
+
+            // UI Screen Swaps
+            document.getElementById('screen-start').classList.add('hidden');
+            document.getElementById('screen-gameover').classList.add('hidden');
+            document.getElementById('hud').classList.remove('opacity-0');
+            document.getElementById('touch-hint').classList.remove('opacity-0');
+
+            currentState = STATE.PLAYING;
+            clock.start();
+        }
+
+        function gameOver() {
+            currentState = STATE.GAMEOVER;
+            audio.playCrash();
+
+            // High Score Persistence
+            const finalDistance = Math.floor(score);
+            let isNewHigh = false;
+
+            if (finalDistance > highScore) {
+                highScore = finalDistance;
+                localStorage.setItem('runner_highscore', highScore);
+                isNewHigh = true;
+            }
+
+            totalCoins += coins;
+            localStorage.setItem('runner_total_coins', totalCoins);
+
+            // Display Results
+            document.getElementById('go-score').innerText = `${finalDistance}m`;
+            document.getElementById('go-coins').innerText = coins;
+            document.getElementById('go-total').innerText = finalDistance + (coins * 10);
+            
+            const badge = document.getElementById('new-high-badge');
+            if (isNewHigh) badge.classList.remove('hidden');
+            else badge.classList.add('hidden');
+
+            document.getElementById('screen-gameover').classList.remove('hidden');
+            document.getElementById('hud').classList.add('opacity-0');
+        }
+
+        function pauseGame() {
+            if (currentState === STATE.PLAYING) {
+                currentState = STATE.PAUSED;
+                document.getElementById('screen-pause').classList.remove('hidden');
+            }
+        }
+
+        function resumeGame() {
+            if (currentState === STATE.PAUSED) {
+                currentState = STATE.PLAYING;
+                document.getElementById('screen-pause').classList.add('hidden');
+                clock.start();
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function initUI() {
+            document.getElementById('menu-highscore').innerText = `${highScore}m`;
+            document.getElementById('menu-total-coins').innerText = totalCoins;
+
+            document.getElementById('btn-start').addEventListener('click', startGame);
+            document.getElementById('btn-restart').addEventListener('click', startGame);
+            document.getElementById('btn-pause').addEventListener('click', pauseGame);
+            document.getElementById('btn-resume').addEventListener('click', resumeGame);
+            document.getElementById('btn-quit').addEventListener('click', () => {
+                document.getElementById('screen-pause').classList.add('hidden');
+                document.getElementById('screen-start').classList.remove('hidden');
+                document.getElementById('hud').classList.add('opacity-0');
+                document.getElementById('menu-highscore').innerText = `${highScore}m`;
+                document.getElementById('menu-total-coins').innerText = totalCoins;
+                currentState = STATE.MENU;
+            });
+        }
+
+        // Initialize Application on Window Load
+        window.onload = () => {
+            initThree();
+            setupInputs();
+            initUI();
+            animate();
+        };
+    </script>
+</body>
+</html>
